@@ -1,0 +1,549 @@
+<!DOCTYPE html><html lang="en"><head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>League Nuzlocke Tracker</title>
+  <link rel="icon" href="https://i.imgur.com/QbB9Bsa.png" type="image/png">
+  <style>
+    :root {
+      --bg: #0b0b0c;
+      --card: rgba(255,255,255,0.06);
+      --border: rgba(255,255,255,0.12);
+      --muted: #a1a1aa; /* zinc-400 */
+      --text: #e7e7ea;
+      --accent: #7c3aed; /* violet-600 */
+      --danger: #ef4444;
+    }
+    * { box-sizing: border-box }
+    html, body { height: 100% }
+    body {
+      margin: 0;
+      color: var(--text);
+      background: var(--bg);
+      font: 14px/1.4 system-ui, -apple-system, Segoe UI, Roboto, Inter, "Helvetica Neue", Arial, "Apple Color Emoji", "Segoe UI Emoji";
+      overflow-y: overlay;
+    }
+
+    /* Floating translucent gradients */
+    .bg-blobs::before,
+    .bg-blobs::after {
+      content: "";
+      position: fixed;
+      inset: auto auto 10% -10%;
+      width: 38rem; height: 38rem;
+      background: radial-gradient(closest-side, rgba(124,58,237,.14), rgba(124,58,237,0));
+      filter: blur(60px);
+      z-index: 0; pointer-events: none;
+    }
+    .bg-blobs::after {
+      left: auto; right: -12%; bottom: 30%;
+      background: radial-gradient(closest-side, rgba(16,185,129,.14), rgba(16,185,129,0));
+    }
+    .grid-overlay {
+      position: fixed; inset: 0; pointer-events:none; z-index:0;
+      background:
+        linear-gradient(to bottom, rgba(255,255,255,.06), transparent 16%, transparent 84%, rgba(255,255,255,.05)),
+        radial-gradient(circle at 50% -20%, rgba(255,255,255,.05), transparent 60%);
+    }
+
+    header {
+      position: sticky; top: 0; z-index: 20;
+      backdrop-filter: saturate(1.2) blur(14px);
+      background: rgba(0,0,0,.35);
+      border-bottom: 1px solid var(--border);
+    }
+    .container { max-width: 1200px; margin: 0 auto; padding: 12px 16px; position: relative; z-index: 1 }
+    .brand { display:flex; align-items:center; gap:10px; font-weight: 700; letter-spacing:.2px }
+    .brand img { width:28px; height:28px; border-radius: 6px }
+    .chip { font-size: 11px; padding: 2px 6px; border-radius: 999px; background: rgba(255,255,255,.12); border: 1px solid var(--border) }
+
+    .toolbar { display:flex; gap:10px; align-items:center; margin-left:auto }
+    .input {
+      display: flex; align-items: center; gap:6px;
+      padding: 8px 10px; border-radius: 10px; min-width: 240px;
+      border: 1px solid var(--border);
+      background: rgba(255,255,255,.08);
+      backdrop-filter: blur(10px);
+    }
+    .input input { width: 100%; border:0; outline:0; color:var(--text); background:transparent }
+    .btn { display:inline-flex; align-items:center; gap:8px; padding:8px 12px; border-radius:10px; border:1px solid var(--border); background: rgba(255,255,255,.06); color:var(--text); cursor:pointer; backdrop-filter: blur(10px) }
+    .btn:hover { border-color: rgba(255,255,255,.22) }
+    .btn-danger { background: rgba(239,68,68,.8); border-color: transparent }
+    .btn:disabled { opacity:.6; cursor:not-allowed }
+    .caret { width: 0; height: 0; border-left: 4px solid transparent; border-right: 4px solid transparent; border-top: 6px solid var(--text); opacity:.8 }
+
+    .stats { display:grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap:12px; padding: 14px 16px }
+    .card { border: 1px solid var(--border); border-radius: 14px; background: var(--card); backdrop-filter: blur(14px); overflow: hidden }
+    .card .pad { padding: 14px }
+    .muted { color: var(--muted) }
+    .kpi { font-size: 22px; font-weight: 700 }
+    .progress { height: 8px; border-radius: 999px; background: rgba(255,255,255,.12); overflow: hidden }
+    .progress > i { display:block; height:100%; background: linear-gradient(90deg, rgba(124,58,237,.9), rgba(16,185,129,.9)); width: 0% }
+
+    main.container { padding-bottom: 64px }
+
+    .grid { display:grid; gap:14px; grid-template-columns: repeat(2, minmax(0,1fr)) }
+    @media (min-width:600px){ .grid{ grid-template-columns: repeat(3, minmax(0,1fr)) } }
+    @media (min-width:900px){ .grid{ grid-template-columns: repeat(4, minmax(0,1fr)) } }
+    @media (min-width:1200px){ .grid{ grid-template-columns: repeat(6, minmax(0,1fr)) } }
+
+    .champ { border:1px solid var(--border); border-radius:14px; background: var(--card); backdrop-filter: blur(12px); overflow:hidden; transition: border-color .2s, transform .2s }
+    .champ:hover { border-color: rgba(255,255,255,.22); transform: translateY(-1px) }
+    .thumb { position:relative; width:100%; aspect-ratio: 10/16; cursor:pointer; user-select:none }
+    .thumb img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; display:block }
+    .thumb::after { content: ""; position:absolute; inset:0; background: linear-gradient(to top, rgba(0,0,0,.62), rgba(0,0,0,.2) 55%, transparent) }
+    .thumb::before { content:""; position:absolute; inset:0; background: linear-gradient(to bottom, rgba(255,255,255,.06), transparent); opacity:.45 }
+    .thumb.locked img { filter: grayscale(100%) }
+    .hint { position:absolute; top:8px; right:8px; padding:4px 8px; font-size:11px; border-radius:999px; background: rgba(0,0,0,.5); border:1px solid var(--border); opacity:0; transition: .2s }
+    .champ:hover .hint { opacity:1 }
+
+    .meta { display:flex; align-items:center; justify-content:space-between; padding:10px 12px }
+    .title { font-weight: 700; font-size: 13px; letter-spacing:.2px; white-space: nowrap; overflow:hidden; text-overflow: ellipsis }
+    .sub { font-size: 11px; color: var(--muted); margin-top: 3px }
+	
+	/* 1) Zoom/crop the images to hide the built-in black border */
+.thumb {
+  overflow: hidden;                 /* clip the zoomed image */
+}
+.thumb img {
+  transform: scale(1.1);           /* slight zoom */
+  transform-origin: center center;  /* keep the focal point centered */
+  will-change: transform;
+}
+
+/* 2) Modern overlay for the bottom meta area */
+.card { position: relative; }       /* allow absolute overlay */
+
+.meta {
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px;                     /* keep your layout */
+  /* transparent shadow gradient so you can see the image through it */
+  background: linear-gradient(
+    to top,
+    rgba(0,0,0,0.60) 0%,
+    rgba(0,0,0,0.35) 40%,
+    rgba(0,0,0,0.00) 100%
+  );
+  backdrop-filter: blur(4px);        /* subtle glassy feel */
+}
+
+/* Optional: make the existing top sheen a touch lighter so it
+   doesn't fight the new bottom gradient */
+.thumb::before { opacity: .35; }
+
+  </style>
+<script defer="" data-domain="johnny-league-nuzlocke.tiiny.site" src="https://analytics.tiiny.site/js/plausible.js"></script><script type="text/javascript" src="https://tiiny.host/ad-script.js"></script><script defer="" data-domain="johnny-league-nuzlocke.tiiny.site" src="https://analytics.tiiny.site/js/plausible.js"></script><script type="text/javascript" src="https://tiiny.host/ad-script.js"></script></head>
+<body>
+  <div class="bg-blobs"></div>
+  <div class="grid-overlay"></div>
+
+  <header>
+    <div class="container" style="display:flex; align-items:center; gap:12px">
+      <div class="brand">
+        <img src="https://i.imgur.com/QbB9Bsa.png" alt="logo">
+        <div>League Nuzlocke Tracker</div>
+        <span class="chip">2025</span>
+      </div>
+      <div class="toolbar">
+        <label class="input" title="Search">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M21 21l-4.3-4.3" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2"></circle></svg>
+          <input id="search" placeholder="Search champions…">
+        </label>
+        <div class="btn" id="sortBtn" title="Sort">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 7h10M3 12h7M3 17h4M17 7v10m0 0l3-3m-3 3l-3-3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+          <span id="sortLabel">A → Z</span>
+          <span class="caret"></span>
+        </div>
+        <button class="btn" id="exportBtn" title="Export JSON">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 21h16" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+          Export
+        </button>
+        <button class="btn" id="importBtn" title="Import JSON">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 21V9m0 0l-4 4m4-4l4 4M4 3h16" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+          Import
+        </button>
+        <input type="file" id="fileInput" accept="application/json" hidden="">
+        <button class="btn btn-danger" id="resetBtn" title="Reset all">Reset</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Stats -->
+  <section class="container stats" id="stats">
+    <div class="card"><div class="pad"><div class="muted">Total Champs</div><div class="kpi" id="kpi-total">0</div><div class="sub">Roster size</div></div></div>
+    <div class="card"><div class="pad"><div class="muted">Locked</div><div class="kpi" id="kpi-locked">0</div><div class="sub">Completed</div></div></div>
+    <div class="card"><div class="pad"><div class="muted">Games</div><div class="kpi" id="kpi-games">0</div><div class="sub">Unsealed attempts</div></div></div>
+    <div class="card"><div class="pad"><div class="muted">Wins</div><div class="kpi" id="kpi-wins">0</div><div class="progress" style="margin-top:10px"><i id="progress-bar" style="width:0%"></i></div><div class="sub" id="progress-label" style="margin-top:6px">0% Locked</div></div></div>
+  </section>
+
+  <main class="container">
+    <div class="grid" id="grid"></div>
+  </main>
+
+  <footer class="container" style="padding: 16px; border-top: 1px solid var(--border); color: var(--muted)">
+    Fan-made tracker by JohnnyKirisaki. Champion art © Riot Games.
+  </footer>
+
+  <script>
+    const champions = [
+      { name: "Aatrox", id: "Aatrox" },
+      { name: "Ahri", id: "Ahri" },
+      { name: "Akali", id: "Akali" },
+      { name: "Akshan", id: "Akshan" },
+      { name: "Alistar", id: "Alistar" },
+      { name: "Ambessa", id: "Ambessa" },
+      { name: "Amumu", id: "Amumu" },
+      { name: "Anivia", id: "Anivia" },
+      { name: "Annie", id: "Annie" },
+      { name: "Aphelios", id: "Aphelios" },
+      { name: "Ashe", id: "Ashe" },
+      { name: "Aurelion Sol", id: "AurelionSol" },
+      { name: "Aurora", id: "Aurora" },
+      { name: "Azir", id: "Azir" },
+      { name: "Bard", id: "Bard" },
+      { name: "Bel'Veth", id: "Belveth" },
+      { name: "Blitzcrank", id: "Blitzcrank" },
+      { name: "Brand", id: "Brand" },
+      { name: "Braum", id: "Braum" },
+      { name: "Briar", id: "Briar" },
+      { name: "Caitlyn", id: "Caitlyn" },
+      { name: "Camille", id: "Camille" },
+      { name: "Cassiopeia", id: "Cassiopeia" },
+      { name: "Cho'Gath", id: "Chogath" },
+      { name: "Corki", id: "Corki" },
+      { name: "Darius", id: "Darius" },
+      { name: "Diana", id: "Diana" },
+      { name: "Draven", id: "Draven" },
+      { name: "Dr. Mundo", id: "DrMundo" },
+      { name: "Ekko", id: "Ekko" },
+      { name: "Elise", id: "Elise" },
+      { name: "Evelynn", id: "Evelynn" },
+      { name: "Ezreal", id: "Ezreal" },
+      { name: "Fiddlesticks", id: "FiddleSticks" },
+      { name: "Fiora", id: "Fiora" },
+      { name: "Fizz", id: "Fizz" },
+      { name: "Galio", id: "Galio" },
+      { name: "Gangplank", id: "Gangplank" },
+      { name: "Garen", id: "Garen" },
+      { name: "Gnar", id: "Gnar" },
+      { name: "Gragas", id: "Gragas" },
+      { name: "Graves", id: "Graves" },
+      { name: "Gwen", id: "Gwen" },
+      { name: "Hecarim", id: "Hecarim" },
+      { name: "Heimerdinger", id: "Heimerdinger" },
+      { name: "Hwei", id: "Hwei" },
+      { name: "Illaoi", id: "Illaoi" },
+      { name: "Irelia", id: "Irelia" },
+      { name: "Ivern", id: "Ivern" },
+      { name: "Janna", id: "Janna" },
+      { name: "Jarvan IV", id: "JarvanIV" },
+      { name: "Jax", id: "Jax" },
+      { name: "Jayce", id: "Jayce" },
+      { name: "Jhin", id: "Jhin" },
+      { name: "Jinx", id: "Jinx" },
+      { name: "Kai'Sa", id: "Kaisa" },
+      { name: "Kalista", id: "Kalista" },
+      { name: "Karma", id: "Karma" },
+      { name: "Karthus", id: "Karthus" },
+      { name: "Kassadin", id: "Kassadin" },
+      { name: "Katarina", id: "Katarina" },
+      { name: "Kayle", id: "Kayle" },
+      { name: "Kayn", id: "Kayn" },
+      { name: "Kennen", id: "Kennen" },
+      { name: "Kha'Zix", id: "Khazix" },
+      { name: "Kindred", id: "Kindred" },
+      { name: "Kled", id: "Kled" },
+      { name: "Kog'Maw", id: "KogMaw" },
+      { name: "K'Sante", id: "KSante" },
+      { name: "LeBlanc", id: "Leblanc" },
+      { name: "Lee Sin", id: "LeeSin" },
+      { name: "Leona", id: "Leona" },
+      { name: "Lillia", id: "Lillia" },
+      { name: "Lissandra", id: "Lissandra" },
+      { name: "Lucian", id: "Lucian" },
+      { name: "Lulu", id: "Lulu" },
+      { name: "Lux", id: "Lux" },
+      { name: "Malphite", id: "Malphite" },
+      { name: "Malzahar", id: "Malzahar" },
+      { name: "Maokai", id: "Maokai" },
+      { name: "Master Yi", id: "MasterYi" },
+      { name: "Mel", id: "Mel" },
+      { name: "Milio", id: "Milio" },
+      { name: "Miss Fortune", id: "MissFortune" },
+      { name: "Mordekaiser", id: "Mordekaiser" },
+      { name: "Morgana", id: "Morgana" },
+      { name: "Naafiri", id: "Naafiri" },
+      { name: "Nami", id: "Nami" },
+      { name: "Nasus", id: "Nasus" },
+      { name: "Nautilus", id: "Nautilus" },
+      { name: "Neeko", id: "Neeko" },
+      { name: "Nidalee", id: "Nidalee" },
+      { name: "Nilah", id: "Nilah" },
+      { name: "Nocturne", id: "Nocturne" },
+      { name: "Nunu & Willump", id: "Nunu" },
+      { name: "Olaf", id: "Olaf" },
+      { name: "Orianna", id: "Orianna" },
+      { name: "Ornn", id: "Ornn" },
+      { name: "Pantheon", id: "Pantheon" },
+      { name: "Poppy", id: "Poppy" },
+      { name: "Pyke", id: "Pyke" },
+      { name: "Qiyana", id: "Qiyana" },
+      { name: "Quinn", id: "Quinn" },
+      { name: "Rakan", id: "Rakan" },
+      { name: "Rammus", id: "Rammus" },
+      { name: "Rek'Sai", id: "RekSai" },
+      { name: "Rell", id: "Rell" },
+      { name: "Renata Glasc", id: "Renata" },
+      { name: "Renekton", id: "Renekton" },
+      { name: "Rengar", id: "Rengar" },
+      { name: "Riven", id: "Riven" },
+      { name: "Rumble", id: "Rumble" },
+      { name: "Ryze", id: "Ryze" },
+      { name: "Samira", id: "Samira" },
+      { name: "Sejuani", id: "Sejuani" },
+      { name: "Senna", id: "Senna" },
+      { name: "Seraphine", id: "Seraphine" },
+      { name: "Sett", id: "Sett" },
+      { name: "Shaco", id: "Shaco" },
+      { name: "Shen", id: "Shen" },
+      { name: "Shyvana", id: "Shyvana" },
+      { name: "Singed", id: "Singed" },
+      { name: "Sion", id: "Sion" },
+      { name: "Sivir", id: "Sivir" },
+      { name: "Skarner", id: "Skarner" },
+      { name: "Smolder", id: "Smolder" },
+      { name: "Sona", id: "Sona" },
+      { name: "Soraka", id: "Soraka" },
+      { name: "Swain", id: "Swain" },
+      { name: "Sylas", id: "Sylas" },
+      { name: "Syndra", id: "Syndra" },
+      { name: "Tahm Kench", id: "TahmKench" },
+      { name: "Taliyah", id: "Taliyah" },
+      { name: "Talon", id: "Talon" },
+      { name: "Taric", id: "Taric" },
+      { name: "Teemo", id: "Teemo" },
+      { name: "Thresh", id: "Thresh" },
+      { name: "Tristana", id: "Tristana" },
+      { name: "Trundle", id: "Trundle" },
+      { name: "Tryndamere", id: "Tryndamere" },
+      { name: "Twisted Fate", id: "TwistedFate" },
+      { name: "Twitch", id: "Twitch" },
+      { name: "Udyr", id: "Udyr" },
+      { name: "Urgot", id: "Urgot" },
+      { name: "Varus", id: "Varus" },
+      { name: "Vayne", id: "Vayne" },
+      { name: "Veigar", id: "Veigar" },
+      { name: "Vel'Koz", id: "Velkoz" },
+      { name: "Vex", id: "Vex" },
+      { name: "Vi", id: "Vi" },
+      { name: "Viego", id: "Viego" },
+      { name: "Viktor", id: "Viktor" },
+      { name: "Vladimir", id: "Vladimir" },
+      { name: "Volibear", id: "Volibear" },
+      { name: "Warwick", id: "Warwick" },
+      { name: "Wukong", id: "MonkeyKing" },
+      { name: "Xayah", id: "Xayah" },
+      { name: "Xerath", id: "Xerath" },
+      { name: "Xin Zhao", id: "XinZhao" },
+      { name: "Yasuo", id: "Yasuo" },
+      { name: "Yone", id: "Yone" },
+      { name: "Yorick", id: "Yorick" },
+      { name: "Yunara", id: "Yunara" },
+      { name: "Yuumi", id: "Yuumi" },
+      { name: "Zac", id: "Zac" },
+      { name: "Zed", id: "Zed" },
+      { name: "Zeri", id: "Zeri" },
+      { name: "Ziggs", id: "Ziggs" },
+      { name: "Zilean", id: "Zilean" },
+      { name: "Zoe", id: "Zoe" },
+      { name: "Zyra", id: "Zyra" }
+    ];
+
+    // --- Persistence helpers ---
+    function loadState(name) {
+      const raw = localStorage.getItem(`champion-${name}`);
+      return raw ? JSON.parse(raw) : { count: 0, locked: false };
+    }
+    function saveState(name, state) {
+      localStorage.setItem(`champion-${name}`, JSON.stringify(state));
+    }
+
+    // --- UI wiring ---
+    const grid = document.getElementById('grid');
+    const search = document.getElementById('search');
+    const sortBtn = document.getElementById('sortBtn');
+    const sortLabel = document.getElementById('sortLabel');
+    const exportBtn = document.getElementById('exportBtn');
+    const importBtn = document.getElementById('importBtn');
+    const fileInput = document.getElementById('fileInput');
+    const resetBtn = document.getElementById('resetBtn');
+
+    const kpiTotal = document.getElementById('kpi-total');
+    const kpiLocked = document.getElementById('kpi-locked');
+    const kpiGames = document.getElementById('kpi-games');
+    const kpiWins = document.getElementById('kpi-wins');
+    const progressBar = document.getElementById('progress-bar');
+    const progressLabel = document.getElementById('progress-label');
+
+    let sortMode = 'az'; // 'az' | 'locked' | 'games' | 'wins'
+
+    function buildImgUrl(id){
+      return `https://ddragon.leagueoflegends.com/cdn/img/champion/loading/${id}_0.jpg`;
+    }
+
+    function render() {
+      const q = (search.value || '').trim().toLowerCase();
+      let data = champions.map(c => ({ ...c, state: loadState(c.name), img: buildImgUrl(c.id) }));
+      if (q) data = data.filter(r => r.name.toLowerCase().includes(q));
+      switch (sortMode) {
+        case 'az': data.sort((a,b)=>a.name.localeCompare(b.name)); break;
+        case 'locked': data.sort((a,b)=>Number(b.state.locked)-Number(a.state.locked)||a.name.localeCompare(b.name)); break;
+        case 'games': data.sort((a,b)=>b.state.count-a.state.count||a.name.localeCompare(b.name)); break;
+        case 'wins': data.sort((a,b)=>(Number(b.state.locked)*b.state.count)-(Number(a.state.locked)*a.state.count)||a.name.localeCompare(b.name)); break;
+      }
+
+      grid.innerHTML = '';
+      const frag = document.createDocumentFragment();
+      data.forEach(c => frag.appendChild(championCard(c)));
+      grid.appendChild(frag);
+
+      updateStats();
+    }
+
+    function championCard(champ){
+      const { name, id, img } = champ;
+      const state = loadState(name);
+      const card = document.createElement('div');
+      card.className = 'champ';
+
+      const thumb = document.createElement('div');
+      thumb.className = 'thumb' + (state.locked ? ' locked' : '');
+      thumb.setAttribute('role','button');
+      thumb.setAttribute('tabindex','0');
+      thumb.setAttribute('aria-label', state.locked ? `${name} is locked` : `Lock ${name}`);
+      const image = document.createElement('img');
+      image.src = img;
+      image.alt = name;
+      image.draggable = false;
+      const hint = document.createElement('div');
+      hint.className = 'hint';
+      hint.textContent = state.locked ? 'Locked' : 'Click / Tap to lock';
+      thumb.appendChild(image);
+      thumb.appendChild(hint);
+
+      function lockIt(){
+        const s = loadState(name);
+        if (s.locked) return;
+        const count = s.count > 0 ? s.count - 1 : 0;
+        saveState(name, { count, locked: true });
+        render();
+      }
+      thumb.addEventListener('click', lockIt);
+      thumb.addEventListener('keydown', e=>{ if(e.key==='Enter' || e.key===' ') { e.preventDefault(); lockIt(); } });
+
+      const meta = document.createElement('div');
+      meta.className = 'meta';
+      const left = document.createElement('div');
+      const title = document.createElement('div');
+      title.className = 'title';
+      title.textContent = name;
+      const sub = document.createElement('div');
+      sub.className = 'sub';
+      sub.textContent = (state.locked ? 'Wins' : 'Games') + ': ' + state.count;
+      left.appendChild(title);
+      left.appendChild(sub);
+
+      const btn = document.createElement('button');
+      btn.className = 'btn';
+      btn.textContent = '+1';
+      btn.disabled = state.locked;
+      btn.addEventListener('click', () => {
+        const s = loadState(name);
+        if (s.locked) return;
+        saveState(name, { ...s, count: s.count + 1 });
+        render();
+      });
+
+      meta.appendChild(left);
+      meta.appendChild(btn);
+
+      card.appendChild(thumb);
+      card.appendChild(meta);
+      return card;
+    }
+
+    function updateStats(){
+      const all = champions.map(c => loadState(c.name));
+      const total = champions.length;
+      const locked = all.filter(s => s.locked).length;
+      const games = all.filter(s => !s.locked).reduce((a,s)=>a+s.count,0);
+      const wins  = all.filter(s => s.locked).reduce((a,s)=>a+s.count,0);
+      const pct = Math.round((locked/total)*100);
+      kpiTotal.textContent = total;
+      kpiLocked.textContent = locked;
+      kpiGames.textContent = games;
+      kpiWins.textContent = wins;
+      progressBar.style.width = pct + '%';
+      progressLabel.textContent = pct + '% Locked';
+    }
+
+    // --- Sorting cycle ---
+    const sortModes = ['az','locked','games','wins'];
+    const sortLabels = { az:'A → Z', locked:'Locked first', games:'Games (desc)', wins:'Wins (desc)' };
+    sortBtn.addEventListener('click', () => {
+      const idx = sortModes.indexOf(sortMode);
+      sortMode = sortModes[(idx+1)%sortModes.length];
+      sortLabel.textContent = sortLabels[sortMode];
+      render();
+    });
+
+    // --- Search ---
+    search.addEventListener('input', () => render());
+
+    // --- Export/Import ---
+    exportBtn.addEventListener('click', () => {
+      const data = {};
+      champions.forEach(c => data[c.name] = loadState(c.name));
+      const blob = new Blob([JSON.stringify(data,null,2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = `league-nuzlocke-${new Date().toISOString().slice(0,10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+    importBtn.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', (e) => {
+      const file = e.target.files[0]; if(!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          const parsed = JSON.parse(String(reader.result));
+          Object.entries(parsed).forEach(([name, state]) => {
+            if (typeof name === 'string' && state && typeof state.count === 'number' && typeof state.locked === 'boolean') {
+              saveState(name, state);
+            }
+          });
+          alert('Import complete ✨');
+          render();
+        } catch { alert('Invalid file format'); }
+      };
+      reader.readAsText(file);
+      e.target.value = '';
+    });
+
+    // --- Reset ---
+    resetBtn.addEventListener('click', () => {
+      if(!confirm('Reset all champions?')) return;
+      champions.forEach(c => saveState(c.name, { count:0, locked:false }));
+      render();
+    });
+
+    // Boot
+    document.addEventListener('DOMContentLoaded', () => {
+      document.getElementById('kpi-total').textContent = champions.length;
+      render();
+    });
+  </script>
+
+</body></html>
