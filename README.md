@@ -16,6 +16,8 @@ In this app, the concept is adapted to *League of Legends*:
 - If you **lose a game** with that champion, it’s considered *knocked out* and you must move on.  
 - The challenge continues until you complete the full alphabet
 
+<img width="1901" height="891" alt="vivaldi_WCdg01uBT1" src="https://github.com/user-attachments/assets/feb830d3-3c9b-4868-a884-ffe52ca5b67b" />
+
 It’s a fun way to shake up your matches, push yourself out of comfort picks, and make every game feel like it’s on the line.
 
 ## About the App
